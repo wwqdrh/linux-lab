@@ -11,7 +11,7 @@ AS	=gas
 LD	=gld
 LDFLAGS	=-x  #-s
 CC	=gcc
-CFLAGS	=-Wall -O -g -fstrength-reduce -fomit-frame-pointer -fcombine-regs \
+CFLAGS	=-Wall -fno-stack-protector -O -g -fstrength-reduce -fomit-frame-pointer -fcombine-regs \
 	-finline-functions -nostdinc -I../../include
 CPP	=gcc -E -nostdinc -I../../include
 

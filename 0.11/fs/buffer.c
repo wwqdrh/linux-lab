@@ -123,7 +123,7 @@ int sync_dev(int dev)
 
 //// 使指定设备在高速缓冲区中的数据无效
 // 扫描高速缓冲区中所有缓冲块，对指定设备的缓冲块复位其有效(更新)标志和已修改标志
-void inline invalidate_buffers(int dev)
+void invalidate_buffers(int dev)
 {
 	int i;
 	struct buffer_head * bh;

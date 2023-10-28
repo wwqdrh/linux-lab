@@ -2,7 +2,7 @@ AR	=gar
 AS	=gas
 CC	=gcc
 LD	=gld
-CFLAGS	=-Wall -O g -fstrength-reduce -fcombine-regs -fomit-frame-pointer \
+CFLAGS	=-Wall -fno-stack-protector -O g -fstrength-reduce -fcombine-regs -fomit-frame-pointer \
 	-nostdinc -I../include
 CPP	=gcc -E -nostdinc -I../include
 

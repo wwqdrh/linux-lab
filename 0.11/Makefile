@@ -1,17 +1,26 @@
-# This is a basic Makefile for setting the general configuration
-include Makefile.head
+#
+# if you want the ram-disk device, define this to be the
+# size in blocks.
+#
+RAMDISK =  #-DRAMDISK=512
 
-LDFLAGS	+= -Ttext 0 -e startup_32
-CFLAGS	+= -Iinclude
-CPP	+= -Iinclude
+AS86	=as86 -0 -a
+LD86	=ld86 -0
+
+AS	=as
+LD	=ld
+LDFLAGS	=-m elf_i386 -Ttext 0 -e startup_32
+CC	=gcc -m32 -march=i386 $(RAMDISK)
+CFLAGS	=-Wall -fno-stack-protector -O2 -fomit-frame-pointer
+
+CPP	=cpp -nostdinc -Iinclude
 
 #
 # ROOT_DEV specifies the default root-device when making the image.
 # This can be either FLOPPY, /dev/xxxx or empty, in which case the
-# default of hd1(0301) is used by 'build'.
+# default of /dev/hd6 is used by 'build'.
 #
-#ROOT_DEV= 021d	# FLOPPY B
-#ROOT_DEV= 0301	# hd1
+ROOT_DEV= #FLOPPY 
 
 ARCHIVES=kernel/kernel.o mm/mm.o fs/fs.o
 DRIVERS =kernel/blk_drv/blk_drv.a kernel/chr_drv/chr_drv.a
@@ -19,79 +28,101 @@ MATH	=kernel/math/math.a
 LIBS	=lib/lib.a
 
 .c.s:
-	$(Q)$(CC) $(CFLAGS) -S -o $*.s $<
+	$(CC) $(CFLAGS) \
+	-nostdinc -Iinclude -S -o $*.s $<
 .s.o:
-	$(Q)$(AS) $(AFLAGS) -o $*.o $<
+	$(AS)  -o $*.o $<
 .c.o:
-	$(Q)$(CC) $(CFLAGS) -c -o $*.o $<
+	$(CC) $(CFLAGS) \
+	-nostdinc -Iinclude -c -o $*.o $<
 
 all:	Image
 
-Image: boot/bootsect boot/setup kernel.bin FORCE
-	$(BUILD) boot/bootsect boot/setup kernel.bin Image
-	$(Q)rm -f kernel.bin
-	$(Q)sync
+Image: boot/bootsect boot/setup tools/system tools/build
+	objcopy -O binary -R .note -R .comment tools/system tools/kernel
+	tools/build boot/bootsect boot/setup tools/kernel $(ROOT_DEV) > Image
+	rm tools/kernel -f
+	sync
 
-init/main.o: FORCE
-	$(Q)(cd init; make $(S) main.o)
+disk: Image
+	dd bs=8192 if=Image of=/dev/fd0
 
-boot/head.o: boot/head.s FORCE
-	$(Q)(cd boot; make $(S) head.o)
+tools/build: tools/build.c
+	$(CC) $(CFLAGS) \
+	-o tools/build tools/build.c
 
-kernel.bin: kernel.sym
-	$(Q)cp -f kernel.sym kernel.tmp
-	$(Q)$(STRIP) kernel.tmp
-	$(Q)$(OBJCOPY) -O binary -R .note -R .comment kernel.tmp kernel.bin
-	$(Q)rm kernel.tmp
+boot/head.o: boot/head.s
+	gcc -m32 -I./include -traditional -c boot/head.s
+	mv head.o boot/
 
-kernel.sym: boot/head.o init/main.o \
-		$(ARCHIVES) $(DRIVERS) $(MATH) $(LIBS) FORCE
-	$(Q)$(LD) $(LDFLAGS) boot/head.o init/main.o \
+tools/system:	boot/head.o init/main.o \
+		$(ARCHIVES) $(DRIVERS) $(MATH) $(LIBS)
+	$(LD) $(LDFLAGS) boot/head.o init/main.o \
 	$(ARCHIVES) \
 	$(DRIVERS) \
 	$(MATH) \
 	$(LIBS) \
-	-o kernel.sym
-	$(Q)nm kernel.sym | grep -v '\(compiled\)\|\(\.o$$\)\|\( [aU] \)\|\(\.\.ng$$\)\|\(LASH[RL]DI\)'| sort > kernel.map
+	-o tools/system 
+	nm tools/system | grep -v '\(compiled\)\|\(\.o$$\)\|\( [aU] \)\|\(\.\.ng$$\)\|\(LASH[RL]DI\)'| sort > System.map 
 
-kernel/math/math.a: FORCE
-	$(Q)(cd kernel/math; make $(S))
+kernel/math/math.a:
+	(cd kernel/math; make)
 
-kernel/blk_drv/blk_drv.a: FORCE
-	$(Q)(cd kernel/blk_drv; make $(S))
+kernel/blk_drv/blk_drv.a:
+	(cd kernel/blk_drv; make)
 
-kernel/chr_drv/chr_drv.a: FORCE
-	$(Q)(cd kernel/chr_drv; make $(S))
+kernel/chr_drv/chr_drv.a:
+	(cd kernel/chr_drv; make)
 
-kernel/kernel.o: FORCE
-	$(Q)(cd kernel; make $(S))
+kernel/kernel.o:
+	(cd kernel; make)
 
-mm/mm.o: FORCE
-	$(Q)(cd mm; make $(S))
+mm/mm.o:
+	(cd mm; make)
 
-fs/fs.o: FORCE
-	$(Q)(cd fs; make $(S))
+fs/fs.o:
+	(cd fs; make)
 
-lib/lib.a: FORCE
-	$(Q)(cd lib; make $(S))
+lib/lib.a:
+	(cd lib; make)
 
-boot/setup: boot/setup.s FORCE
-	$(Q)(cd boot; make $(S))
+boot/setup: boot/setup.s
+	$(AS86) -o boot/setup.o boot/setup.s
+	$(LD86) -s -o boot/setup boot/setup.o
 
-boot/bootsect: boot/bootsect.s kernel.bin FORCE
-	$(Q)(cd boot; make $(S))
+boot/bootsect:	boot/bootsect.s
+	$(AS86) -o boot/bootsect.o boot/bootsect.s
+	$(LD86) -s -o boot/bootsect boot/bootsect.o
+
+tmp.s:	boot/bootsect.s tools/system
+	(echo -n "SYSSIZE = (";ls -l tools/system | grep system \
+		| cut -c25-31 | tr '\012' ' '; echo "+ 15 ) / 16") > tmp.s
+	cat boot/bootsect.s >> tmp.s
 
 clean:
-	$(Q)rm -f Image kernel.map tmp_make core boot/bootsect boot/setup
-	$(Q)rm -f kernel.sym boot/*.o typescript* info bochsout.txt
-	$(Q)for i in init mm fs kernel lib boot; do (cd $$i; make $(S) clean); done
+	rm -f Image System.map tmp_make core boot/bootsect boot/setup
+	rm -f init/*.o tools/system tools/build boot/*.o
+	(cd mm;make clean)
+	(cd fs;make clean)
+	(cd kernel;make clean)
+	(cd lib;make clean)
 
-distclean: clean
-	$(Q)rm -f tag* cscope* linux-0.11.*
+backup: clean
+	(cd .. ; tar cf - linux | compress16 - > backup.Z)
+	sync
 
 dep:
-	$(Q)sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	$(Q)cp tmp_make Makefile
-	$(Q)for i in init fs kernel mm; do (cd $$i; make $(S) dep); done
+	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
+	(for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done) >> tmp_make
+	cp tmp_make Makefile
+	(cd fs; make dep)
+	(cd kernel; make dep)
+	(cd mm; make dep)
 
-FORCE: ;
+### Dependencies:
+init/main.o: init/main.c include/unistd.h include/sys/stat.h \
+  include/sys/types.h include/sys/times.h include/sys/utsname.h \
+  include/utime.h include/time.h include/linux/tty.h include/termios.h \
+  include/linux/sched.h include/linux/head.h include/linux/fs.h \
+  include/linux/mm.h include/signal.h include/asm/system.h \
+  include/asm/io.h include/stddef.h include/stdarg.h include/fcntl.h

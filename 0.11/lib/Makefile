@@ -6,34 +6,40 @@
 # unless it's something special (ie not a .c file).
 #
 
-include ../Makefile.head
-
-CFLAGS	+= -I../include
-CPP	+= -I../include
+AR	=ar
+AS	=as --32
+LD	=ld
+LDFLAGS	=-s -x
+CC	=gcc -m32 -march=i386
+CFLAGS	=-Wall -O -fstrength-reduce -fno-stack-protector -fomit-frame-pointer \
+	-finline-functions -nostdinc -I../include
+CPP	=gcc -m32 -E -nostdinc -I../include
 
 .c.s:
-	$(Q)$(CC) $(CFLAGS) -S -o $*.s $<
+	$(CC) $(CFLAGS) \
+	-S -o $*.s $<
 .s.o:
-	$(Q)$(AS) $(AFLAGS) -o $*.o $<
+	$(AS) -o $*.o $<
 .c.o:
-	$(Q)$(CC) $(CFLAGS) -c -o $*.o $<
+	$(CC) $(CFLAGS) \
+	-c -o $*.o $<
 
 OBJS  = ctype.o _exit.o open.o close.o errno.o write.o dup.o setsid.o \
 	execve.o wait.o string.o malloc.o
 
 lib.a: $(OBJS)
-	$(Q)$(AR) rcs lib.a $(OBJS)
-	$(Q)sync
+	$(AR) rcs lib.a $(OBJS)
+	sync
 
 clean:
-	$(Q)rm -f core *.o *.a tmp_make
-	$(Q)for i in *.c;do rm -f `basename $$i .c`.s;done
+	rm -f core *.o *.a tmp_make
+	for i in *.c;do rm -f `basename $$i .c`.s;done
 
 dep:
-	$(Q)sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	$(Q)(for i in *.c;do echo -n `echo $$i | sed 's,\.c,\.s,'`" "; \
+	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
+	(for i in *.c;do echo -n `echo $$i | sed 's,\.c,\.s,'`" "; \
 		$(CPP) -M $$i;done) >> tmp_make
-	$(Q)cp tmp_make Makefile
+	cp tmp_make Makefile
 
 ### Dependencies:
 _exit.s _exit.o : _exit.c ../include/unistd.h ../include/sys/stat.h \

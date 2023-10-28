@@ -27,7 +27,7 @@ ifeq ($(OS), Linux)
   AFLAGS  = -g --32
   LD      = ld
   LDFLAGS = -m elf_i386
-  CC      = gcc
+  CC      = gcc-3.4
   CFLAGS  = -g -m32 -fno-builtin -fno-stack-protector -fomit-frame-pointer -fstrength-reduce #-Wall
 
   CPP     = cpp -nostdinc

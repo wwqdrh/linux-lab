@@ -1,5 +1,5 @@
 CC	=gcc
-CFLAGS	=-O -Wall -g -fstrength-reduce -fcombine-regs -fomit-frame-pointer \
+CFLAGS	=-O -Wall -fno-stack-protector -g -fstrength-reduce -fcombine-regs -fomit-frame-pointer \
 	-finline-functions -nostdinc -I../include
 AS	=gas
 AR	=gar
