@@ -17,3 +17,5 @@ kernel.sym
 kernel.map
 src
 temp
+compile_commands.json
+.cache

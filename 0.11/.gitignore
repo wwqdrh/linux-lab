@@ -2,4 +2,5 @@ Thumbs.db
 *.log
 *.bak
 .DS_Store
-
+compile_commands.json
+.cache

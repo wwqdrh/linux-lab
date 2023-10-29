@@ -18,10 +18,14 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
+// 写页面验证，若页面不可写则复制页面
 extern void write_verify(unsigned long address);
 
 long last_pid=0;
 
+// 进程空间区域写前验证函数，对addr到addr+size这一段范围以页为单位
+// 执行写操作前的检测操作
+// 首先需要找到addr所在页面开始地址，然后加上进程数据段基址
 void verify_area(void * addr,int size)
 {
 	unsigned long start;
