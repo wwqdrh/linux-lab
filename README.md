@@ -1,13 +1,23 @@
 # usage
 
+hdc-0.11.img是一个文件系统镜像，它的格式是Minix文件系统的镜像。Linux所有版本都支持这种格式的文件系统，所以可以直接在宿主Linux上通过mount命令访问此文件内的文件。这样可以达到宿主系统和bochs内运行的Linux 0.11之间交换文件的效果
+
 ## versions
 
-- 0.00
-- 0.01
-- 0.11
-- 0.12
-- 0.99
-- ...
+|版本号|发布日期|说明|
+|-|-|-|
+|0.00|1991|内部版本|
+|0.01|1991|第一个正式对外发布版本，多线程文件系统，分段和分页内存管理，还不包含软盘驱动程序|
+|0.02|1991|内部版本|
+|0.10|1991|增加了内存分配哭函数|
+|0.11|1991|基本可以正常运行的内核版本|
+|0.12|1992|增加了数学协同处理器的软件模拟程序，增加了作业控制，许虚拟控制台，文件符号链接和虚拟内存对换功能|
+|0.95.x(0.13)|1992|加入虚拟文件系统支持，值包含MINIX文件系统，增加了登录功能，改善了软盘驱动程序和文件系统的性能，MINIX系统相同，支持CDROM|
+|0.96.x|1992|加入unixsocket支持，增加了ext文件系统alpha测试程序，SCSI驱动加入内核，软盘类型自动识别，改善串行驱动，高速缓冲、内存管理性能，支持动态链接库|
+|0.97.x|1992|增加了SCSI驱动支持，动态高速缓冲功能，msdos和ext文件系统支持，总线鼠标驱动程序，内核被映射到线性地址3GB处|
+|0.98.x|1992|改善TCP/IP(0.8.1)网络的支持，重写内部管理部分。从0.98.4开始每个进程可同时打开256个文件（原来32个），并且进程的内核堆栈独立使用一个内存页面|
+|0.99.x|1992|重新设计进程对内存的使用分配，每个进程有4G线性空间，改进网络代码，NFS支持|
+|1.0|1994|第一个正式版本|
 
 ## dev
 
@@ -17,9 +27,9 @@
 
 > ubuntu:22.10里的镜像源已经broken了
 
-参考下面路径，`tools/docker/Dockerfile`
-
 ```bash
+cd 0.11
+
 docker build -t [name]:latest .
 
 # 如果有代理，加上 --build-arg HTTP_PROXY=http://192.168.0.105:7890 --build-arg HTTPS_PROXY=http://192.168.0.105:7890
@@ -27,24 +37,10 @@ docker build -t [name]:latest .
 docker run -itd --name ubuntu --network host -v $(pwd)"/0.11":/0.11 [name]:latest bash
 
 docker exec -it ubuntu bash
-```
 
-## error
+cd 0.11
 
-ld -r -o kernel.o sched.o system_call.o traps.o asm.o fork.o panic.o printk.o vsprintf.o sys.o exit.o signal.o mktime.o
-ld: Relocatable linking with relocations from format elf32-i386 (sched.o) to format elf64-x86-64 (kernel.o) is not supported
-
-make[1]: *** [kernel.o] Error 1
-解决办法，在x86-64上链接出x86 文件，添加 -m elf_i386 选项
-
-```
-ld -m elf_i386 -r -o kernel.o sched.o system_call.o traps.o asm.o fork.o panic.o printk.o vsprintf.o sys.o exit.o signal.o mktime.o
-
-ld -m elf_i386fs -r -o mm.o memory.o page.o
-
-ld -m elf_i386 -r -o fs.o open.o read_write.o inode.o file_table.o buffer.o super.o \
-	block_dev.o char_dev.o file_dev.o stat.o exec.o pipe.o namei.o \
-	bitmap.o fcntl.o ioctl.o truncate.o
+make
 ```
 
 ## 示例

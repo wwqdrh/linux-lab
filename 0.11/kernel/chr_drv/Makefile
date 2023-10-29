@@ -6,43 +6,39 @@
 # unless it's something special (ie not a .c file).
 #
 
-AR	=ar
-AS	=as --32
-LD	=ld
-LDFLAGS	=-s -x
-CC	=gcc -m32 -march=i386
-CFLAGS	=-Wall -O -fstrength-reduce -fno-stack-protector -fomit-frame-pointer \
-	-finline-functions -nostdinc -I../../include
-CPP	=gcc -m32 -march=i386 -E -nostdinc -I../../include
+include ../../Makefile.header
+
+CFLAGS	+= -I../../include
+CPP	+= -I../../include
 
 .c.s:
-	$(CC) $(CFLAGS) \
+	@$(CC) $(CFLAGS) \
 	-S -o $*.s $<
 .s.o:
-	$(AS) -o $*.o $<
+	@$(AS) -o $*.o $<
 .c.o:
-	$(CC) $(CFLAGS) \
+	@$(CC) $(CFLAGS) \
 	-c -o $*.o $<
 
 OBJS  = tty_io.o console.o keyboard.o serial.o rs_io.o \
 	tty_ioctl.o
 
 chr_drv.a: $(OBJS)
-	$(AR) rcs chr_drv.a $(OBJS)
+	@$(AR) rcs chr_drv.a $(OBJS)
 	sync
 
 keyboard.s: kb.S ../../include/linux/config.h
-	$(Q)$(CPP) kb.S -o keyboard.s
+	@$(CPP) kb.S -o keyboard.s
 
 clean:
-	rm -f core *.o *.a tmp_make keyboard.s
-	for i in *.c;do rm -f `basename $$i .c`.s;done
+	@rm -f core *.o *.a tmp_make keyboard.s
+	@for i in *.c;do rm -f `basename $$i .c`.s;done
 
 dep:
-	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
-	(for i in *.c;do echo -n `echo $$i | sed 's,\.c,\.s,'`" "; \
+	@sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
+	@(for i in *.c;do echo -n `echo $$i | sed 's,\.c,\.s,'`" "; \
 		$(CPP) -M $$i;done) >> tmp_make
-	cp tmp_make Makefile
+	@cp tmp_make Makefile
 
 ### Dependencies:
 console.s console.o: console.c ../../include/linux/sched.h \

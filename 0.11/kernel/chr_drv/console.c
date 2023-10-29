@@ -458,7 +458,7 @@ void con_write(struct tty_struct * tty)
 						pos -= video_size_row;
 						lf();
 					}
-					__asm__("movb 0x07,%%ah\n\t"
+					__asm__("movb attr,%%ah\n\t"
 						"movw %%ax,%1\n\t"
 						::"a" (c),"m" (*(short *)pos)
 						);

@@ -16,3 +16,4 @@ kernel.bin
 kernel.sym
 kernel.map
 src
+temp

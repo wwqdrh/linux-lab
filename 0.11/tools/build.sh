@@ -1,40 +1,40 @@
 #!/bin/bash
-#
 # build.sh -- a shell version of build.c for the new bootsect.s & setup.s
 # author: falcon <wuzhangjin@gmail.com>
 # update: 2008-10-10
 
 bootsect=$1
 setup=$2
-kernel=$3
-image=$4
+system=$3
+IMAGE=$4
+root_dev=$5
 
-# Write bootsect (512 bytes, 1 sector)
-[ ! -f "$bootsect" ] && echo "Error: No bootsect binary file there" && exit -1
-dd if=$bootsect bs=512 count=1 of=$image >/dev/null 2>&1
+# Set the biggest sys_size
+# Changes from 0x20000 to 0x30000 by tigercn to avoid oversized code.
+SYS_SIZE=$((0x3000*16))
 
-# Write setup (4 * 512bytes, 4 sectors) see SETUPLEN in boot/bootsect.s
-[ ! -f "$setup" ] && echo "Error: No setup binary file there" && exit -1
-dd if=$setup seek=1 bs=512 count=4 of=$image >/dev/null 2>&1
-
-# Write kernel (< SYS_SIZE), see the hardcoded SYSSIZE in src/boot/bootsetc.s
-[ ! -f "$kernel" ] && echo "Error: No kernel binary file there" && exit -1
-
-# Verify RAMDISK_START, must reserve enough space for bootsect, setup and kernel itself.
-# TODO: need to document why need 9 more blocks?
-
-KERNEL_SIZE=$(stat -c%s $kernel | tr -d '\n')
-_SYS_SIZE=$(( KERNEL_SIZE + 5*512))
-_RAMDISK_START=$(( _SYS_SIZE / 1024 + 9))
-
-if [ $_RAMDISK_START -gt $RAMDISK_START ]; then
-    echo "Note: The kernel binary is too big, Please increase RAMDISK_START to (138, 410)"
-    echo
-    echo " e.g."
-    echo "     $ make distclean"
-    echo "     $ make boot RAMDISK_START=$_RAMDISK_START"
-    echo
-    exit -1
+# set the default "device" file for root image file
+if [ -z "$root_dev" ]; then
+	DEFAULT_MAJOR_ROOT=3
+	DEFAULT_MINOR_ROOT=1
+else
+	DEFAULT_MAJOR_ROOT=${root_dev:0:2}
+	DEFAULT_MINOR_ROOT=${root_dev:2:3}
 fi
 
-dd if=$kernel seek=5 bs=512 of=$image >/dev/null 2>&1
+# Write bootsect (512 bytes, one sector) to stdout
+[ ! -f "$bootsect" ] && echo "there is no bootsect binary file there" && exit -1
+dd if=$bootsect bs=512 count=1 of=$IMAGE 2>&1 >/dev/null
+
+# Write setup(4 * 512bytes, four sectors) to stdout
+[ ! -f "$setup" ] && echo "there is no setup binary file there" && exit -1
+dd if=$setup seek=1 bs=512 count=4 of=$IMAGE 2>&1 >/dev/null
+
+# Write system(< SYS_SIZE) to stdout
+[ ! -f "$system" ] && echo "there is no system binary file there" && exit -1
+system_size=`wc -c $system |cut -d" " -f1`
+[ $system_size -gt $SYS_SIZE ] && echo "the system binary is too big" && exit -1
+dd if=$system seek=5 bs=512 count=$((2888-1-4)) of=$IMAGE 2>&1 >/dev/null
+
+# Set "device" for the root image file
+echo -ne "\x$DEFAULT_MINOR_ROOT\x$DEFAULT_MAJOR_ROOT" | dd ibs=1 obs=1 count=2 seek=508 of=$IMAGE conv=notrunc  2>&1 >/dev/null
