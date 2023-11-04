@@ -18,6 +18,7 @@ static char buf[1024];
 
 extern int vsprintf(char * buf, const char * fmt, va_list args);
 
+// 用于内核状态下打印日志，因为内核态不能使用用户末世的fs段寄存器
 int printk(const char *fmt, ...)
 {
 	va_list args;

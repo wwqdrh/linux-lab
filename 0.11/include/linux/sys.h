@@ -1,3 +1,5 @@
+// 对于所有系统调用的实现函数，内核把他们按照系统调用功能号顺序排列成一张函数指针表
+// 然后在中断int 0x80的处理过程中根据用户提供的功能号调用对应系统调用函数进行处理
 extern int sys_setup();
 extern int sys_exit();
 extern int sys_fork();

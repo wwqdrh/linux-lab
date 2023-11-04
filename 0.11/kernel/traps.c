@@ -19,18 +19,21 @@
 #include <asm/segment.h>
 #include <asm/io.h>
 
+// 定义了一个寄存器变量__res, 该变量将被保存在一个寄存器中，便于快速访问和操作
 #define get_seg_byte(seg,addr) ({ \
 register char __res; \
 __asm__("push %%fs;mov %%ax,%%fs;movb %%fs:%2,%%al;pop %%fs" \
 	:"=a" (__res):"0" (seg),"m" (*(addr))); \
 __res;})
 
+// 取段seg中地址addr处的一个长字(4字节)
 #define get_seg_long(seg,addr) ({ \
 register unsigned long __res; \
 __asm__("push %%fs;mov %%ax,%%fs;movl %%fs:%2,%%eax;pop %%fs" \
 	:"=a" (__res):"0" (seg),"m" (*(addr))); \
 __res;})
 
+// 取fs段寄存器的值（选择符）
 #define _fs() ({ \
 register unsigned short __res; \
 __asm__("mov %%fs,%%ax":"=a" (__res):); \
@@ -60,6 +63,10 @@ void reserved(void);
 void parallel_interrupt(void);
 void irq13(void);
 
+// 打印出错中断的名称、出错号
+// 调用程序的EIP、EFLAGS、ESP、fs段寄存器值
+// 段基址、段长度、进程号pid、任务号、10字节指令码。
+// 如果堆栈在用户数据段，则还打印16字节的堆栈内容
 static void die(char * str,long esp_ptr,long nr)
 {
 	long * esp = (long *) esp_ptr;
@@ -99,6 +106,7 @@ void do_divide_error(long esp, long error_code)
 	die("divide error",esp,error_code);
 }
 
+// 参数是进入中断后被顺序压入堆栈的寄存器值
 void do_int3(long * esp, long error_code,
 		long fs,long es,long ds,
 		long ebp,long esi,long edi,
@@ -178,6 +186,8 @@ void do_reserved(long esp, long error_code)
 	die("reserved (15,17-47) error",esp,error_code);
 }
 
+// trap初始化，设置中断向量
+// set_trap_gate特权级为0和set_system_gate特权级为3
 void trap_init(void)
 {
 	int i;

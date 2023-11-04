@@ -29,18 +29,18 @@ no_error_code:
 	pushl %edi
 	pushl %esi
 	pushl %ebp
-	push %ds
+	push %ds # 16位的寄存器入栈后也要占用4个字节
 	push %es
 	push %fs
-	pushl $0		# "error code"
-	lea 44(%esp),%edx
+	pushl $0		# 将数值0作为出错码入栈
+	lea 44(%esp),%edx # 取堆栈中原调用返回地址处堆栈指针位置，并压入堆栈
 	pushl %edx
-	movl $0x10,%edx
+	movl $0x10,%edx # 初始化段寄存器ds、es、fs，加载内核数据段选择符
 	mov %dx,%ds
 	mov %dx,%es
 	mov %dx,%fs
-	call *%eax
-	addl $8,%esp
+	call *%eax # *号表示调用操作数指定地址处的函数，称为间接调用
+	addl $8,%esp # 将堆栈指针加8相当于执行两次pop操作，弹出最后入堆栈的两个C函数参数
 	pop %fs
 	pop %es
 	pop %ds
@@ -99,10 +99,10 @@ irq13:
 	xorb %al,%al
 	outb %al,$0xF0
 	movb $0x20,%al
-	outb %al,$0x20
-	jmp 1f
+	outb %al,$0x20 # 向8259主中断控制芯片发送EOI(中断结束)信号
+	jmp 1f # 这两个跳转指令起延时作用
 1:	jmp 1f
-1:	outb %al,$0xA0
+1:	outb %al,$0xA0 # 向8259从中断控制芯片发送EOI(中断结束)信号
 	popl %eax
 	jmp coprocessor_error
 
@@ -110,8 +110,8 @@ irq13:
 double_fault:
 	pushl $do_double_fault
 error_code:
-	xchgl %eax,4(%esp)		# error code <-> %eax
-	xchgl %ebx,(%esp)		# &function <-> %ebx
+	xchgl %eax,4(%esp)		# 保存eax的值到堆栈上
+	xchgl %ebx,(%esp)		# 保存ebx的值到堆栈上
 	pushl %ecx
 	pushl %edx
 	pushl %edi
@@ -120,7 +120,7 @@ error_code:
 	push %ds
 	push %es
 	push %fs
-	pushl %eax			# error code
+	pushl %eax			# 出错号入栈
 	lea 44(%esp),%eax		# offset
 	pushl %eax
 	movl $0x10,%eax

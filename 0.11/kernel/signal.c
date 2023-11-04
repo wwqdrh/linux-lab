@@ -12,11 +12,13 @@
 
 void do_exit(int error_code);
 
+// 当前任务信号屏蔽位图
 int sys_sgetmask()
 {
 	return current->blocked;
 }
 
+// 设置新的信号屏蔽位图，SIGKILL不能被屏蔽
 int sys_ssetmask(int newmask)
 {
 	int old=current->blocked;
@@ -25,6 +27,7 @@ int sys_ssetmask(int newmask)
 	return old;
 }
 
+// 复制sigaction数据到fs数据段to处，即从内核空间复制到用户数据段中
 static inline void save_old(char * from,char * to)
 {
 	int i;
@@ -60,6 +63,7 @@ int sys_signal(int signum, long handler, long restorer)
 	return handler;
 }
 
+// 改变进程在收到一个信号时的操作
 int sys_sigaction(int signum, const struct sigaction * action,
 	struct sigaction * oldaction)
 {
@@ -79,6 +83,7 @@ int sys_sigaction(int signum, const struct sigaction * action,
 	return 0;
 }
 
+// 将信号处理句柄插入到用户程序堆栈中，并在本系统调用结束返回后立即执行信号句柄程序，然后继续执行用户的程序
 void do_signal(long signr,long eax, long ebx, long ecx, long edx,
 	long fs, long es, long ds,
 	long eip, long cs, long eflags,

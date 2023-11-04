@@ -41,13 +41,15 @@ void verify_area(void * addr,int size)
 	}
 }
 
+// 复制内存页表
+// 为新任务在线性地址空间中设置代码段和数据段基址、限长并复制页表
 int copy_mem(int nr,struct task_struct * p)
 {
 	unsigned long old_data_base,new_data_base,data_limit;
 	unsigned long old_code_base,new_code_base,code_limit;
 
-	code_limit=get_limit(0x0f);
-	data_limit=get_limit(0x17);
+	code_limit=get_limit(0x0f); // 代码段选择符
+	data_limit=get_limit(0x17); // 数据段选择符
 	old_code_base = get_base(current->ldt[1]);
 	old_data_base = get_base(current->ldt[2]);
 	if (old_data_base != old_code_base)
@@ -71,6 +73,13 @@ int copy_mem(int nr,struct task_struct * p)
  * information (task[nr]) and sets up the necessary registers. It
  * also copies the data segment in it's entirety.
  */
+ // 创建并复制进程的代码段和数据段以及环境
+ // 系统首先为新建进程在主内存区中申请一页内存来存放其任务数据结构信息，并复制当前进程任务数据结构中的所有内容作为新进程任务数据结构的模板
+ // 将当前进程设置为新进程的父进程，清除信号位图并复位新进程各统计值。
+ // 根据当前进程环境设置新进程任务状态段TSS中各寄存器的值
+ // 系统设置新任务代码段和数据段的基址和段限长，并复制当前进程内存分页管理的页目录项和页表项
+ // 在GDT中设置新任务的TSS和LDT描述符项，其中基地址信息指向新进程任务结构中的tss和ldt
+ // 最后将新任务的tss和ldt描述符项设置成可运行状态，并向当前进程返回新进程号
 int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 		long ebx,long ecx,long edx,
 		long fs,long es,long ds,

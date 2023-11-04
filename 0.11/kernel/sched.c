@@ -23,6 +23,7 @@
 #define _S(nr) (1<<((nr)-1))
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
+// 内核调试函数，显示任务号nr的进程号、进程状态、内核堆栈空闲字节数
 void show_task(int nr,struct task_struct * p)
 {
 	int i,j = 4096-sizeof(struct task_struct);
@@ -34,6 +35,8 @@ void show_task(int nr,struct task_struct * p)
 	printk("%d (of %d) chars free in kernel stack\n\r",i,j);
 }
 
+// 显示所有任务的任务号、进程号、进程状态和内核堆栈空闲字节数
+// NR_TASKS是系统能容纳的最大进程数量(64)
 void show_stat(void)
 {
 	int i;
@@ -50,20 +53,26 @@ extern void mem_use(void);
 extern int timer_interrupt(void);
 extern int system_call(void);
 
+// 任务的内核态堆栈结构
+// 一个任务的数据结构与其内核态堆栈在同一内存页中，所以堆栈寄存器ss可以获得其数据段选择符
 union task_union {
 	struct task_struct task;
 	char stack[PAGE_SIZE];
 };
 
+// 定义初始任务的数据
 static union task_union init_task = {INIT_TASK,};
 
+// volatile，要求必须从内存中取值，而不是使用寄存器中存储的值
 long volatile jiffies=0;
 long startup_time=0;
-struct task_struct *current = &(init_task.task);
-struct task_struct *last_task_used_math = NULL;
+struct task_struct *current = &(init_task.task); // 当前任务指针
+struct task_struct *last_task_used_math = NULL; // 使用过协处理器任务的指针
 
-struct task_struct * task[NR_TASKS] = {&(init_task.task), };
+struct task_struct * task[NR_TASKS] = {&(init_task.task), }; // 定义任务指针数组
 
+// 定义用户堆栈，供1k像，容量4k字节
+// 内核初始化操作过程中被用作内核栈，初始化完成以后被用作任务0的用户态堆栈
 long user_stack [ PAGE_SIZE>>2 ] ;
 
 struct {
@@ -100,6 +109,10 @@ void math_state_restore()
  *   NOTE!!  Task 0 is the 'idle' task, which gets called when no other
  * tasks can run. It can not be killed, and it cannot sleep. The 'state'
  * information in task[0] is never used.
+
+ 负责选择系统中要运行的进程
+ 1、首先对所有任务进程检测，唤醒任何一个已经得到信号的任务，如果进程的信号位图中除去被阻塞的信号还有其他信号，并且任务处于可中断睡眠状态，则置任务为就绪状态
+ 2、根据进程的时间片和优先权调度机制，来选择随后要执行的任务，如果所有任务时间片都已经运行完，则根据任务优先级进行重制
  */
 void schedule(void)
 {
@@ -141,6 +154,7 @@ void schedule(void)
 	switch_to(next);
 }
 
+// 转换当前任务的状态为可中断的等待状态，并重新调度
 int sys_pause(void)
 {
 	current->state = TASK_INTERRUPTIBLE;
@@ -148,6 +162,7 @@ int sys_pause(void)
 	return 0;
 }
 
+// 当一个任务所请求的资源正忙或不在内存中时暂时切换出去，放在等待队列中等待一段时间当切换回来后再继续运行
 void sleep_on(struct task_struct **p)
 {
 	struct task_struct *tmp;
@@ -164,6 +179,8 @@ void sleep_on(struct task_struct **p)
 		tmp->state=0;
 }
 
+// 将任务置为可中断状态后再加入到等待队列中
+// 在唤醒的时候，需要先判断队列上是否有后来的等待任务，如果有，则调度他们先运行
 void interruptible_sleep_on(struct task_struct **p)
 {
 	struct task_struct *tmp;
@@ -185,6 +202,7 @@ repeat:	current->state = TASK_INTERRUPTIBLE;
 		tmp->state=0;
 }
 
+// 把正在等待可用资源的指定任务置为就绪状态
 void wake_up(struct task_struct **p)
 {
 	if (p && *p) {
@@ -229,6 +247,9 @@ int ticks_to_floppy_on(unsigned int nr)
 	return mon_timer[nr];
 }
 
+// 等待指定软驱马达启动所需的一段时间，然后返回
+// 设置指定软驱的马达启动到正常转速所需的延时，然后睡眠等待
+// 在定时中断过程中会一直递减判断这里设定的延时值。当延时到期，就会唤醒这里的等待进程
 void floppy_on(unsigned int nr)
 {
 	cli();
@@ -237,11 +258,13 @@ void floppy_on(unsigned int nr)
 	sti();
 }
 
+// 设置关闭相应软驱马达停转定时器，如果不明确指定则是马达开启100s后关闭
 void floppy_off(unsigned int nr)
 {
 	moff_timer[nr]=3*HZ;
 }
 
+// 软盘定时处理子程序，更新马达启动定时值和马达关闭停转计时值
 void do_floppy_timer(void)
 {
 	int i;
@@ -261,14 +284,17 @@ void do_floppy_timer(void)
 	}
 }
 
+// 最多可有64个定时器
 #define TIME_REQUESTS 64
 
+// 定时器链表结构和定时器数组，该定时器链表专用于供软驱关闭马达和启动马达定时操作
 static struct timer_list {
 	long jiffies;
 	void (*fn)();
 	struct timer_list * next;
 } timer_list[TIME_REQUESTS], * next_timer = NULL;
 
+// 添加定时器
 void add_timer(long jiffies, void (*fn)(void))
 {
 	struct timer_list * p;
@@ -302,6 +328,7 @@ void add_timer(long jiffies, void (*fn)(void))
 	sti();
 }
 
+// 时钟中断的处理程序
 void do_timer(long cpl)
 {
 	extern int beepcount;
@@ -382,6 +409,7 @@ int sys_nice(long increment)
 	return 0;
 }
 
+// 内核调度程序的初始化子程序
 void sched_init(void)
 {
 	int i;

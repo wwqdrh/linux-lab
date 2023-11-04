@@ -30,7 +30,7 @@
  *	2C(%esp) - %oldss
  */
 
-SIG_CHLD	= 17
+SIG_CHLD	= 17  # 子进程停止或结束
 
 EAX		= 0x00
 EBX		= 0x04
@@ -42,23 +42,24 @@ DS		= 0x18
 EIP		= 0x1C
 CS		= 0x20
 EFLAGS		= 0x24
-OLDESP		= 0x28
+OLDESP		= 0x28 # 当特权级变化时栈会切换，用户栈指针被保存在内核态中
 OLDSS		= 0x2C
 
+# task_struct中变量的偏移值
 state	= 0		# these are offsets into the task-struct.
-counter	= 4
-priority = 8
-signal	= 12
+counter	= 4 # 递减，运行时间片
+priority = 8 # 优先级，越大则运行时间越长
+signal	= 12 # 信号位图，每个比特位代表一种信号，信号值=位偏移值+1
 sigaction = 16		# MUST be 16 (=len of sigaction)
-blocked = (33*16)
+blocked = (33*16) # 受阻信号位图的偏移量
 
 # offsets within sigaction
-sa_handler = 0
-sa_mask = 4
-sa_flags = 8
-sa_restorer = 12
+sa_handler = 0 # 信号处理过程的句柄
+sa_mask = 4 # 信号屏蔽码
+sa_flags = 8 # 信号集
+sa_restorer = 12 # 恢复函数指针
 
-nr_system_calls = 74
+nr_system_calls = 74 # 内核系统调用总数
 
 /*
  * Ok, I get parallel printer interrupts while using the floppy for some
@@ -68,9 +69,9 @@ nr_system_calls = 74
 .globl hd_interrupt,floppy_interrupt,parallel_interrupt
 .globl device_not_available, coprocessor_error
 
-.align 2
-bad_sys_call:
-	movl $-1,%eax
+.align 2 # 内存4字节对齐
+bad_sys_call: # 错误的系统调用号
+	movl $-1,%eax # eax中置-1，退出中断
 	iret
 .align 2
 reschedule:
@@ -78,25 +79,25 @@ reschedule:
 	jmp schedule
 .align 2
 system_call:
-	cmpl $nr_system_calls-1,%eax
+	cmpl $nr_system_calls-1,%eax # 调用号如果超出范围的话就在eax中置-1并退出
 	ja bad_sys_call
-	push %ds
+	push %ds # 保存原段寄存器值
 	push %es
 	push %fs
-	pushl %edx
+	pushl %edx # 一个系统调用最多带有3个参数
 	pushl %ecx		# push %ebx,%ecx,%edx as parameters
 	pushl %ebx		# to the system call
 	movl $0x10,%edx		# set up ds,es to kernel space
-	mov %dx,%ds
+	mov %dx,%ds # ds、es指向内核数据段
 	mov %dx,%es
 	movl $0x17,%edx		# fs points to local data space
 	mov %dx,%fs
-	call *sys_call_table(,%eax,4)
-	pushl %eax
-	movl current,%eax
-	cmpl $0,state(%eax)		# state
+	call *sys_call_table(,%eax,4) # 计算调用地址 [_sys_call_table + %eax * 4], 间接调用指定功能C函数
+	pushl %eax # 把系统调用返回值入栈
+	movl current,%eax # 将当前任务数据结构地址放在eax中
+	cmpl $0,state(%eax)		# 不在就绪状态则重新执行调度程序
 	jne reschedule
-	cmpl $0,counter(%eax)		# counter
+	cmpl $0,counter(%eax)		# 在就绪状态但是时间片用完也会去执行调度程序
 	je reschedule
 ret_from_sys_call:
 	movl current,%eax		# task[0] cannot have signals
@@ -127,6 +128,8 @@ ret_from_sys_call:
 	pop %ds
 	iret
 
+# int16 处理器错误中断
+# 当协处理器检测到自己发生错误时，就会通过ERROR引脚通知CPU
 .align 2
 coprocessor_error:
 	push %ds
@@ -144,6 +147,7 @@ coprocessor_error:
 	pushl $ret_from_sys_call
 	jmp math_error
 
+# 设备不存在或协处理器不存在
 .align 2
 device_not_available:
 	push %ds
@@ -172,6 +176,7 @@ device_not_available:
 	popl %ebp
 	ret
 
+# int32 时钟中断处理程序
 .align 2
 timer_interrupt:
 	push %ds		# save ds,es and put kernel data space

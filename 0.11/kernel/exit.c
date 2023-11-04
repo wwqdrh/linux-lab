@@ -13,9 +13,10 @@
 #include <linux/tty.h>
 #include <asm/segment.h>
 
-int sys_pause(void);
-int sys_close(int fd);
+int sys_pause(void); // 将进程设为睡眠状态
+int sys_close(int fd); // 关闭指定文件
 
+// 释放指定进程占用的任务槽及其任务数据结构占用的内存页面
 void release(struct task_struct * p)
 {
 	int i;
@@ -32,6 +33,7 @@ void release(struct task_struct * p)
 	panic("trying to release non-existent task");
 }
 
+// 向指定任务p发送信号sig（即在进程p位图中添加该信号），权限为priv
 static inline int send_sig(long sig,struct task_struct * p,int priv)
 {
 	if (!p || sig<1 || sig>32)
