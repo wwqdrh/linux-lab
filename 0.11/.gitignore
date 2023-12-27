@@ -4,3 +4,5 @@ Thumbs.db
 .DS_Store
 compile_commands.json
 .cache
+System.map
+tools/system

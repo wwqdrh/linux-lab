@@ -54,6 +54,7 @@ static long HIGH_MEMORY = 0;
 #define copy_page(from,to) \
 __asm__("cld ; rep ; movsl"::"S" (from),"D" (to),"c" (1024))
 
+// 用于表示物理内存页面状态，其中的值表示被占用的次数，0表示对应的物理内存空闲着
 static unsigned char mem_map [ PAGING_PAGES ] = {0,};
 
 /*
@@ -237,6 +238,9 @@ void un_wp_page(unsigned long * table_entry)
 	copy_page(old_page,new_page);
 }	
 
+/*
+ * int14中断，开始处理页访问异常
+ */
 /*
  * This routine handles present pages, when users try to write
  * to a shared page. It is done by copying the page to a new address

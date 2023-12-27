@@ -19,6 +19,14 @@ hdc-0.11.img是一个文件系统镜像，它的格式是Minix文件系统的镜
 |0.99.x|1992|重新设计进程对内存的使用分配，每个进程有4G线性空间，改进网络代码，NFS支持|
 |1.0|1994|第一个正式版本|
 
+## use
+
+```bash
+docker run -d --name command -p 2002:22 -v $(pwd):/code hrdqww/dev-c
+```
+
+然后在vscode使用远程连接进入容器，`root@123456`
+
 ## dev
 
 > 一些例子依赖minix内核模块，但是docker提供了linux内核中不包含，所以建议在虚拟机中使用ubuntu镜像编译而不是使用docker
