@@ -219,6 +219,11 @@ unsigned long put_page(unsigned long page,unsigned long address)
 	return page;
 }
 
+/*
+ * 取消写保护页面函数，用于异常中断过程中写保护异常的处理
+ * 首先判断页面是否共享，若没有则把页面设置成可写然后退出
+ * 如果页面是共享状态，则重新申请一新页面并复制被写页面内容，以供写进程单独使用
+ */
 void un_wp_page(unsigned long * table_entry)
 {
 	unsigned long old_page,new_page;
@@ -239,7 +244,8 @@ void un_wp_page(unsigned long * table_entry)
 }	
 
 /*
- * int14中断，开始处理页访问异常
+ * 写保护策略
+ * 
  */
 /*
  * This routine handles present pages, when users try to write
@@ -367,6 +373,9 @@ static int share_page(unsigned long address)
 	return 0;
 }
 
+// 首先尝试与已经加载的相同文件进行页面共享
+// 如果只是进程动态申请内存页面时只需要映射一页物理内存即可
+// 如果共享不成功，只能从相应文件中读入所缺的数据页面到指定线性地址处
 void do_no_page(unsigned long error_code,unsigned long address)
 {
 	int nr[4];
@@ -374,14 +383,19 @@ void do_no_page(unsigned long error_code,unsigned long address)
 	unsigned long page;
 	int block,i;
 
+	// 从线性地址计算出逻辑地址
 	address &= 0xfffff000;
 	tmp = address - current->start_code;
+	// 如果current->executable为0(在内核的任务0、1，以及任务1派生没有调用过execve的任务都为0)
+	// 以及参数指定的线性地址超出代码加数据长度，则表明进程在申请新的内存页面
 	if (!current->executable || tmp >= current->end_data) {
 		get_empty_page(address);
 		return;
 	}
+	// 尝试共享页面
 	if (share_page(tmp))
 		return;
+	// 申请一页新的物理内存
 	if (!(page = get_free_page()))
 		oom();
 /* remember that 1 block is used for header */
@@ -389,18 +403,27 @@ void do_no_page(unsigned long error_code,unsigned long address)
 	for (i=0 ; i<4 ; block++,i++)
 		nr[i] = bmap(current->executable,block);
 	bread_page(page,current->executable->i_dev,nr);
+	// 在读设备逻辑块操作时，可能出现在执行文件中的读取页面位置可能离文件尾不到一个页面，即会读入一些无用信息
+	// 将这些信息清零处理
 	i = tmp + 4096 - current->end_data;
 	tmp = page + 4096;
 	while (i-- > 0) {
 		tmp--;
 		*(char *)tmp = 0;
 	}
+	// 将新申请的物理内存放到指定的线性地址处
 	if (put_page(page,address))
 		return;
 	free_page(page);
 	oom();
 }
 
+// 物理内存初始化
+// 将1MB之后的物理内存按照4KB分成一个一个页面，并且将这些页面映射到字节数组mem_map来管理这些页面
+// 若字节值为0，则表示对应页面空闲
+// 若字节值大于等于1，则表示页面被占用或被不同程序共享占用
+// start_mem用作页面分配的主内存区起始地址(去除ramdisk所占内存空间)
+// end_mem为实际物理内存最大地址
 void mem_init(long start_mem, long end_mem)
 {
 	int i;
