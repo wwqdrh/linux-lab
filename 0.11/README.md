@@ -50,7 +50,62 @@ page_fault:
 	iret
 ```
 
+## 相关汇编代码讲解
+
+`内存复制的汇编代码`
+
+```c
+#define copy_page(from,to) \
+__asm__("cld ; rep ; movsl"::"S" (from),"D" (to),"c" (1024))
+```
+
+__asm__ 表示开始嵌入汇编代码
+
+"cld" 清除方向标志,用于设定操作的方向是从低地址到高地址
+
+"rep" 重复前面的指令,直到 CX 寄存器减为 0
+
+"movsl" 移动一串词(32位)的数据,从 DS:SI 地址到 ES:DI 地址
+
+":" 表明这两行是操作数,包括:
+
+"S"(from) - 把参数 from 设定为 SI 寄存器,作为数据源地址
+
+"D"(to) - 把参数 to 设定为 DI 寄存器,作为数据目标地址
+
+"c"(1024) - 设置 CX 寄存器为 1024,表明复制 1024 个词(4KB 页面)的数据
+
+`获取空闲的页`
+
+```c
+unsigned long get_free_page(void)
+{
+register unsigned long __res asm("ax");
+
+__asm__("std ; repne ; scasb\n\t"
+	"jne 1f\n\t"
+	"movb $1,1(%%edi)\n\t" 找到了话设置标记为已占用
+	"sall $12,%%ecx\n\t"  将页面项左移12位，4kb
+	"addl %2,%%ecx\n\t"  
+	"movl %%ecx,%%edx\n\t"  使用edx寄存器存储结果(空闲页面地址)
+	"movl $1024,%%ecx\n\t"  ecx设置为1024
+	"leal 4092(%%edx),%%edi\n\t"  将edx存储的空闲页面地址+4092 存储到edi中
+	"rep ; stosl\n\t" 清零空闲页面内容
+	" movl %%edx,%%eax\n"
+	"1: cld" 回复调用前的方向标志
+	:"=a" (__res)
+	:"0" (0),"i" (LOW_MEM),"c" (PAGING_PAGES),
+	"D" (mem_map+PAGING_PAGES-1)
+	);
+return __res;
+}
+```
+
 ## 寻址
+
+> 内核页表从物理地址0x1000处开始(紧接着目录空间)，共4个页表
+> 每个页表，共1024项，每项4字节，总共占用4K字节
+> 每个进程(除了0 1进程)的页表项都是进程被创建时由内核为其在主内存区申请得到的，每个页表项对应一页物理内存，
 
 在0.11版本中，所有进程都是用一个页目录表，而每个进程都有自己的页表。
 
@@ -66,6 +121,11 @@ page_fault:
 - 已修改D
 - 读/写位
 - 用户/超级用户位
+
+- 如果U/S是0，则R/W不生效
+- 如果U/S是1
+  - R/W是0，那么运行在用户层的代码就只能读页面
+  - R/W是1，那么就有读写页面
 
 <img src="./docs/images/地址转换.jpg"/>
 

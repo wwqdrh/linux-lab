@@ -40,17 +40,29 @@ static inline void oom(void)
 __asm__("movl %%eax,%%cr3"::"a" (0))
 
 /* these are not to be changed without changing head.s etc */
+/*
+ * linux0.11内核默认支持最大内存容量16MB
+ * LOW_MEM: 内存最低地址1MB
+ * PAGING_MEMORY: 分页内存，即主内存
+ * PAGING_PAGES: 分页后的物理内存页面数
+ * MAP_NR: 将地址转为页号的函数
+ * USED: 页面被占用标志
+ */
 #define LOW_MEM 0x100000
 #define PAGING_MEMORY (15*1024*1024)
 #define PAGING_PAGES (PAGING_MEMORY>>12)
 #define MAP_NR(addr) (((addr)-LOW_MEM)>>12)
 #define USED 100
 
+// 用于判断给定线性地址是否位于当前进程的代码段中
+// (addr+4095)&~4095 用于获取线性地址所在内存页面的末端地址
 #define CODE_SPACE(addr) ((((addr)+4095)&~4095) < \
 current->start_code + current->end_code)
 
+// 存放实际物理内存的最高端地址
 static long HIGH_MEMORY = 0;
 
+// 从from处复制一页内存到to处
 #define copy_page(from,to) \
 __asm__("cld ; rep ; movsl"::"S" (from),"D" (to),"c" (1024))
 
@@ -89,17 +101,18 @@ return __res;
  */
 void free_page(unsigned long addr)
 {
-	if (addr < LOW_MEM) return;
-	if (addr >= HIGH_MEMORY)
+	if (addr < LOW_MEM) return; // 表示在内核程序或高速缓冲中
+	if (addr >= HIGH_MEMORY) // 如果大于了最大物理内存
 		panic("trying to free nonexistent page");
 	addr -= LOW_MEM;
-	addr >>= 12;
+	addr >>= 12; // 减去低端地址并除以4k获得页号(进程的逻辑地址，这里也能看得出来，内核地址是所有进程共用的)
 	if (mem_map[addr]--) return;
-	mem_map[addr]=0;
+	mem_map[addr]=0; // 走到这说明mem_map本身就是空闲的
 	panic("trying to free free page");
 }
 
 /*
+ * 释放页表连续的内存块
  * This function frees a continuos block of page tables, as needed
  * by 'exit()'. As does copy_page_tables(), this handles only 4Mb blocks.
  */
@@ -108,26 +121,30 @@ int free_page_tables(unsigned long from,unsigned long size)
 	unsigned long *pg_table;
 	unsigned long * dir, nr;
 
-	if (from & 0x3fffff)
+	if (from & 0x3fffff) // 4M边界 因为页表最大映射内存为4M
 		panic("free_page_tables called with wrong alignment");
 	if (!from)
 		panic("Trying to free up swapper memory space");
+	// 计算参数size给出的长度所占的页目录项数
+	// 加上了4M 右移22位除以4M(因为每个页表占据4M)
 	size = (size + 0x3fffff) >> 22;
 	dir = (unsigned long *) ((from>>20) & 0xffc); /* _pg_dir = 0 */
+	// 此时size是页目录项数 dir是起始目录项指针
 	for ( ; size-->0 ; dir++) {
-		if (!(1 & *dir))
+		if (!(1 & *dir)) // 如果该项p位为0，表示没有使用可以直接跳过
 			continue;
+		// 页表地址
 		pg_table = (unsigned long *) (0xfffff000 & *dir);
 		for (nr=0 ; nr<1024 ; nr++) {
-			if (1 & *pg_table)
+			if (1 & *pg_table) // 如果该项有效，则释放对应页
 				free_page(0xfffff000 & *pg_table);
-			*pg_table = 0;
-			pg_table++;
+			*pg_table = 0; // 该页表项内容清零
+			pg_table++; // 指向页表中下一项
 		}
-		free_page(0xfffff000 & *dir);
-		*dir = 0;
+		free_page(0xfffff000 & *dir); // 释放页表项
+		*dir = 0; // 对应页表的目录项清零
 	}
-	invalidate();
+	invalidate(); // 刷新页变换高速缓冲
 	return 0;
 }
 
@@ -148,6 +165,11 @@ int free_page_tables(unsigned long from,unsigned long size)
  * 1 Mb-range, so the pages can be shared with the kernel. Thus the
  * special case for nr=xxxx.
  */
+ /*
+ * 只能被fork函数中使用，复制时，需申请新页面来存放新页表，原物理内存区将被共享，
+ * 此后两个进程将共享内存区，直到有一个进程执行写操作时，内核才会为写操作进程分配新的内存页
+ * from、to是线性地址，size是需要复制的内存长度，单位是字节
+ */
 int copy_page_tables(unsigned long from,unsigned long to,long size)
 {
 	unsigned long * from_page_table;
@@ -156,11 +178,12 @@ int copy_page_tables(unsigned long from,unsigned long to,long size)
 	unsigned long * from_dir, * to_dir;
 	unsigned long nr;
 
+	// from和to地址，都不能超过4M
 	if ((from&0x3fffff) || (to&0x3fffff))
 		panic("copy_page_tables called with wrong alignment");
 	from_dir = (unsigned long *) ((from>>20) & 0xffc); /* _pg_dir = 0 */
 	to_dir = (unsigned long *) ((to>>20) & 0xffc);
-	size = ((unsigned) (size+0x3fffff)) >> 22;
+	size = ((unsigned) (size+0x3fffff)) >> 22; // 求得页表数
 	for( ; size-->0 ; from_dir++,to_dir++) {
 		if (1 & *to_dir)
 			panic("copy_page_tables: already exist");
@@ -177,15 +200,16 @@ int copy_page_tables(unsigned long from,unsigned long to,long size)
 				continue;
 			this_page &= ~2;
 			*to_page_table = this_page;
+			// 对于1M位置以下的地址的内核页面，不需要处理
 			if (this_page > LOW_MEM) {
-				*from_page_table = this_page;
+				*from_page_table = this_page; // 令源页表项也只读
 				this_page -= LOW_MEM;
 				this_page >>= 12;
 				mem_map[this_page]++;
 			}
 		}
 	}
-	invalidate();
+	invalidate(); // 刷新页变换高速缓冲
 	return 0;
 }
 
@@ -194,6 +218,7 @@ int copy_page_tables(unsigned long from,unsigned long to,long size)
  * It returns the physical address of the page gotten, 0 if
  * out of memory (either when trying to access page-table or
  * page.)
+ * 将一内存页面映射到指定线性地址处，如果内存不够(在访问页表或页面时)则返回0
  */
 unsigned long put_page(unsigned long page,unsigned long address)
 {
