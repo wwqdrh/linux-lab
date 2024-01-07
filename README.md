@@ -4,6 +4,8 @@ hdc-0.11.img是一个文件系统镜像，它的格式是Minix文件系统的镜
 
 ## versions
 
+> 源码归档路径: https://kernel.googlesource.com/pub/scm/linux/kernel/git/nico/archive/
+
 |版本号|发布日期|说明|
 |-|-|-|
 |0.00|1991|内部版本|
