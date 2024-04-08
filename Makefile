@@ -133,10 +133,10 @@ cscope:
 	@cscope -Rbkq
 
 start:
-	@qemu-system-x86_64 -m 16M -boot a -fda Image -hda $(HDA_IMG)
+	@qemu-system-x86_64 -vnc :0 -m 16M -boot a -fda Image -hda $(HDA_IMG)
 
 debug:
-	@qemu-system-x86_64 -m 16M -boot a -fda Image -hda $(HDA_IMG) -s -S
+	@qemu-system-x86_64 -vnc :0 -m 16M -boot a -fda Image -hda $(HDA_IMG) -s -S
 
 bochs-debug:
 	@$(BOCHS) -q -f tools/bochs/bochsrc/bochsrc-hd-dbg.bxrc	
